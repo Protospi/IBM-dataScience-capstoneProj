@@ -6,10 +6,11 @@ import dash_core_components as dcc
 from dash.dependencies import Input, Output
 import plotly.express as px
 
-# Read the airline data into pandas dataframe
+# Read the data into pandas dataframe
 spacex_df = pd.read_csv("spacex_launch_dash.csv")
 max_payload = spacex_df['Payload Mass (kg)'].max()
 min_payload = spacex_df['Payload Mass (kg)'].min()
+range_slider = [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
 
 # Create a dash application
 app = dash.Dash(__name__)
@@ -39,11 +40,11 @@ app.layout = html.Div(children=[html.H1('SpaceX Launch Records Dashboard',
                                 html.Div(dcc.Graph(id='success-pie-chart')),
                                 html.Br(),
 
-                                html.P("Payload range (Kg):"),
+                                html.H2("Payload range (Kg):"),
                                 # TASK 3: Add a slider to select payload range
                                 dcc.RangeSlider(id='payload-slider',
                                                 min=0, max=10000, step=1000,
-                                                marks={0: '0', 2500: '2500', 5000: '5000', 7500:'7500', 10000:'10000'},
+                                                marks={i : {'label' : i, 'style':{'font-size':'20px'}} for i in range_slider},
                                                 value=[min_payload, max_payload]),
 
                                 # TASK 4: Add a scatter chart to show the correlation between payload and launch success
@@ -55,18 +56,20 @@ app.layout = html.Div(children=[html.H1('SpaceX Launch Records Dashboard',
 @app.callback(Output(component_id='success-pie-chart', component_property='figure'),
               Input(component_id='site-dropdown', component_property='value'))
 def get_pie_chart(entered_site):
-    filtered_df = spacex_df
+    filtered_df1 = spacex_df.loc[spacex_df['class'] == 1]
     if entered_site == 'ALL':
-        fig = px.pie(filtered_df, values='class', 
+        fig = px.pie(filtered_df1, values='class', 
                     names='Launch Site', 
-                    title='Pie Chart of all Launch Sites Attemps')
+                    title='Pie Chart of Launch Succes by Site')
         return fig
     else:
         # return the outcomes   piechart for a selected site
-        aux = filtered_df.loc[filtered_df['Launch Site'] == entered_site, :]
-        fig = px.pie(aux, values='class', 
-                     names='Mission Outcome', 
-                     title='Pie chart of '+ entered_site + ' launch site attempt')
+        aux = spacex_df.groupby('Launch Site')['class'].value_counts().reset_index('Launch Site').rename(columns = {'class':'total'}).reset_index()
+        aux['class'] = aux['class'].replace((1,0), ('Success', 'Failure'))
+        aux = aux.loc[aux['Launch Site'] == entered_site, :]
+        fig = px.pie(aux, values='total', 
+                     names='class', 
+                     title='Pie chart of '+ entered_site + ' Mission Outcome')
         return fig
 
 # TASK 4:
@@ -74,24 +77,32 @@ def get_pie_chart(entered_site):
 @app.callback(Output(component_id='success-payload-scatter-chart', component_property='figure'),
               [Input(component_id='site-dropdown', component_property='value'), Input(component_id="payload-slider", component_property="value")])
 def get_scatter_chart(entered_site, payload):
-    filtered_df = spacex_df
+    filtered_df = spacex_df.copy()
+    filtered_df['class'] = filtered_df['class'].replace((1,0), ('Success', 'Failure'))
+    filtered_df.rename(columns = {'Booster Version Category': 'Booster'}, inplace = True)
     if entered_site == 'ALL':
         aux = filtered_df.loc[(filtered_df['Payload Mass (kg)'] > payload[0]) & (filtered_df['Payload Mass (kg)'] < payload[1]), :]
-        fig = px.scatter(aux,
+        fig2 = px.strip(aux,
                          x = 'Payload Mass (kg)',
                          y = 'class',
-                         color = 'Booster Version Category',
-                         title ='Scatterplot Lauch sites by Payload Mass(kg)')
-        return fig
+                         color = 'Booster',
+                         title ='Scatterplot of Success by Payload Mass(kg) and Booster on all Sites',
+                         stripmode = "overlay",
+                         labels={'class': 'Outcome'}).update_traces(marker_size=10).update_layout(font=dict(size=18))
+        return fig2
     else:
-        # return the outcomes   piechart for a selected site
+        # return the outcomes   scatterchart for a selected site
+        filtered_df = spacex_df
+        filtered_df['class'] = filtered_df['class'].replace((1,0), ('Success', 'Failure'))
         aux = filtered_df.loc[(filtered_df['Launch Site'] == entered_site) & (filtered_df['Payload Mass (kg)'] > payload[0]) & (filtered_df['Payload Mass (kg)'] < payload[1]), :]
-        fig = px.scatter(aux,
+        fig2 = px.strip(aux,
                          x = 'Payload Mass (kg)',
                          y = 'class',
-                         color = 'Booster Version Category',
-                         title = 'Scatterplot of ' + entered_site + ' by Payload Mass(kg)')
-        return fig
+                         color = 'Booster',
+                         title = 'Scatterplot of Success on ' + entered_site + ' by Payload Mass(kg) and Booster',
+                         stripmode = "overlay",
+                         labels={'class': 'Outcome'}).update_traces(marker_size=10).update_layout(font=dict(size=18))
+        return fig2
 
 # Run the app
 if __name__ == '__main__':
